@@ -2,7 +2,7 @@
 //! and no app on the phone
 //!
 //! it uses the screen sharing xcode 27's device hub uses, the phone's coredevice display service sends its screen as
-//! hevc video over apple's developer tunnel, and its hid services take touches and button presses, which the phone
+//! h.264 video over apple's developer tunnel, and its hid services take touches and button presses, which the phone
 //! only acts on while that video runs, the tunnel runs on a userspace tcp stack so nothing needs admin rights, the
 //! iphone is reached through apple's device service, `usbmuxd`, which macos has built in and windows gets from the
 //! apple devices app
@@ -17,10 +17,9 @@ use std::{
 use idevice::{
     IdeviceError, IdeviceService, ReadWrite, RsdService,
     core_device::{
-        ButtonState, CallInfoBlob, DisplayServiceClient, HevcDepacketizer, IndigoHidClient, RtpPacket,
-        TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient, build_keyframe_request,
-        build_liveness, build_screen_audio_offer, build_screen_video_offer, build_start_audio_parameters,
-        build_start_video_parameters, is_rtcp,
+        ButtonState, CallInfoBlob, DisplayServiceClient, IndigoHidClient, RtpPacket, TOUCHSCREEN_STATE_CONTACT,
+        TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient, build_keyframe_request, build_liveness,
+        build_screen_audio_offer, build_start_audio_parameters, build_start_video_parameters, is_rtcp,
     },
     core_device_proxy::CoreDeviceProxy,
     lockdown::LockdownClient,
@@ -32,6 +31,8 @@ use idevice::{
 };
 use serde::Serialize;
 use tokio::sync::mpsc;
+
+mod h264;
 
 const LABEL: &str = "mirrormyiphone";
 
@@ -111,7 +112,7 @@ pub struct Phone {
     pub developer_mode: Option<bool>,
 }
 
-/// one picture of the screen, an annex-b hevc access unit, a key frame carries the parameter sets with it so a
+/// one picture of the screen, an annex-b h.264 access unit, a key frame carries the parameter sets with it so a
 /// decoder can start there
 pub struct Frame {
     pub data: Vec<u8>,
@@ -216,7 +217,7 @@ pub async fn mirror(
 
     let mut screen = Screen::start(&mut adapter, &mut handshake).await?;
     let mut controls = Controls::default();
-    let mut depacketizer = HevcDepacketizer::new();
+    let mut depacketizer = h264::Depacketizer::default();
     let mut feedback = Feedback::new(screen.ssrc);
     let mut alive = tokio::time::interval(Duration::from_secs(1));
     let mut expected: Option<u16> = None;
@@ -244,22 +245,22 @@ pub async fn mirror(
                     eprintln!("Lost {} video packets, asking the iPhone for a fresh frame.", packet.sequence_number.wrapping_sub(expected));
                     broken = true;
                     // the depacketizer would wait for the lost packet, the tunnel keeps order so it never comes
-                    depacketizer = HevcDepacketizer::new();
+                    depacketizer = h264::Depacketizer::default();
                     feedback.ask_for_key_frame(&screen.video).await;
                 }
                 if expected.is_none_or(|e| packet.sequence_number.wrapping_sub(e) < 0x8000) {
                     expected = Some(packet.sequence_number.wrapping_add(1));
                 }
-                depacketizer.push(packet.sequence_number, packet.timestamp, packet.payload);
+                depacketizer.push(packet.payload);
                 // the marker bit closes a picture, everything before it belongs together
                 if !packet.marker {
                     continue;
                 }
-                let mut data = depacketizer.take_output();
+                let mut data = depacketizer.take();
                 if data.is_empty() {
                     continue;
                 }
-                let key = has_key_frame(&data);
+                let key = h264::has_key_frame(&data);
                 if key {
                     data = setup.attach(data);
                 }
@@ -343,7 +344,7 @@ impl Screen {
         client.start_media_stream(params).await?;
 
         let ssrc = uuid::Uuid::new_v4().as_u128() as u32;
-        let offer = build_screen_video_offer(&call_id(), &call_info, ssrc)?;
+        let offer = h264::offer(&call_id(), &call_info, ssrc)?;
         let params = build_start_video_parameters(
             &host,
             video.local_port(),
@@ -450,7 +451,7 @@ impl Controls {
     }
 }
 
-/// the stream's parameter sets, vps sps and pps, a decoder can't start without them, a fresh depacketizer after a
+/// the stream's parameter sets, sps and pps, a decoder can't start without them, a fresh depacketizer after a
 /// loss no longer has them to put in front of the next key frame
 #[derive(Default)]
 struct Setup(Vec<u8>);
@@ -459,7 +460,7 @@ impl Setup {
     /// remembers the parameter sets a key frame carries, or puts the remembered ones in front if it has none
     fn attach(&mut self, frame: Vec<u8>) -> Vec<u8> {
         let sets: Vec<u8> = nal_units(&frame)
-            .filter(|nal| (32..=34).contains(&((nal[0] >> 1) & 0x3F)))
+            .filter(|nal| matches!(nal[0] & 0x1F, 7 | 8))
             .flat_map(|nal| [&[0, 0, 0, 1][..], nal].concat())
             .collect();
         if !sets.is_empty() {
@@ -492,12 +493,6 @@ fn nal_units(data: &[u8]) -> impl Iterator<Item = &[u8]> {
             .max(start);
         (end > start).then(|| &data[start..end])
     })
-}
-
-/// whether an annex-b access unit holds an idr or cra picture, hevc nal types 16 to 21
-fn has_key_frame(data: &[u8]) -> bool {
-    data.windows(4)
-        .any(|w| w[..3] == [0, 0, 1] && (16..=21).contains(&((w[3] >> 1) & 0x3F)))
 }
 
 async fn devices() -> Result<Vec<UsbmuxdDevice>> {
