@@ -1,0 +1,5 @@
+.DS_Store
+*.zip
+core/target/
+app/target/
+app/gen/
