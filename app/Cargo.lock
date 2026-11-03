@@ -1954,6 +1954,7 @@ name = "mirrormyiphone-core"
 version = "1.0.0"
 dependencies = [
  "dirs",
+ "flate2",
  "idevice",
  "plist",
  "serde",

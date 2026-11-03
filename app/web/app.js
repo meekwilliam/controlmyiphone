@@ -120,7 +120,7 @@ function resetDecoder() {
   description = "";
 }
 
-// each message is a first byte of 1 for a key frame, then annex-b hevc, which the decoder takes as it is
+// each message is a first byte of 1 for a key frame, then annex-b h.264
 // what the last frame held, for the log when the decoder fails
 let lastTypes = "";
 // the setup the decoder has now, the phone can start over with new settings at any key frame
@@ -173,7 +173,7 @@ function decodeFailed(error) {
   if (error.name === "NotSupportedError") {
     return empty(
       "Can't play the video",
-      'This computer can\'t decode HEVC video. On Windows, install "HEVC Video Extensions" from the Microsoft Store.',
+      "This computer can't decode H.264 video.",
       true,
     );
   }
@@ -185,85 +185,25 @@ function decodeFailed(error) {
   }
 }
 
-// webkit only decodes hevc set up the way mp4 files carry it, an hvcC box with the parameter sets and frames with
-// a length before each nal unit instead of start codes, chromium takes this too, so both get it
+// the decoder gets h.264 set up the way mp4 files carry it, an avcC box with the sps and pps and frames with a length
+// before each nal unit instead of start codes, webkit only plays it this way, chromium takes it too
 function decoderConfig(annexB) {
   const nals = nalUnits(annexB);
-  const ofType = (type) => nals.filter((nal) => nalType(nal) === type);
-  const [vps, sps, pps] = [ofType(32), ofType(33), ofType(34)];
-  if (!sps.length) return { codec: "hvc1.1.6.L153.B0" };
-  const b = unescape(sps[0].subarray(2));
-  const subLayers = (b[0] >> 1) & 7;
-  const ptl = b.subarray(1, 13);
-  const { chroma, lumaDepth, chromaDepth } = subLayers === 0 ? spsFormat(b) : { chroma: 1, lumaDepth: 8, chromaDepth: 8 };
-
-  const header = [
-    1,
-    ...ptl.subarray(0, 12),
-    0xf0, 0x00,
-    0xfc,
-    0xfc | chroma,
-    0xf8 | (lumaDepth - 8),
-    0xf8 | (chromaDepth - 8),
-    0, 0,
-    ((subLayers + 1) << 3) | ((b[0] & 1) << 2) | 3,
-  ];
-  const arrays = [[32, vps], [33, sps], [34, pps]].filter(([, list]) => list.length);
-  const body = [arrays.length];
-  for (const [type, list] of arrays) {
-    body.push(0x80 | type, list.length >> 8, list.length & 0xff);
-    for (const nal of list) body.push(nal.length >> 8, nal.length & 0xff, ...nal);
-  }
-  return { codec: codecName(ptl), description: Uint8Array.from([...header, ...body]) };
+  const sps = nals.filter((nal) => nalType(nal) === 7);
+  const pps = nals.filter((nal) => nalType(nal) === 8);
+  if (!sps.length || !pps.length) return { codec: "avc1.640033" };
+  const description = [1, sps[0][1], sps[0][2], sps[0][3], 0xff, 0xe0 | sps.length];
+  for (const nal of sps) description.push(nal.length >> 8, nal.length & 0xff, ...nal);
+  description.push(pps.length);
+  for (const nal of pps) description.push(nal.length >> 8, nal.length & 0xff, ...nal);
+  // profile, constraint flags and level, like avc1.640033
+  const codec = "avc1." + [sps[0][1], sps[0][2], sps[0][3]].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return { codec, description: Uint8Array.from(description) };
 }
 
-// the webcodecs name for the stream, from the profile, tier and level, like hvc1.1.6.L150.B0
-function codecName(ptl) {
-  const space = ptl[0] >> 6;
-  const tier = (ptl[0] >> 5) & 1;
-  const profile = ptl[0] & 0x1f;
-  let compat = ((ptl[1] << 24) | (ptl[2] << 16) | (ptl[3] << 8) | ptl[4]) >>> 0;
-  let reversed = 0;
-  for (let i = 0; i < 32; i++) {
-    reversed = ((reversed << 1) | (compat & 1)) >>> 0;
-    compat >>>= 1;
-  }
-  const constraints = Array.from(ptl.subarray(5, 11));
-  while (constraints.length && constraints[constraints.length - 1] === 0) constraints.pop();
-  return [
-    "hvc1",
-    (space ? "ABC"[space - 1] : "") + profile,
-    reversed.toString(16).toUpperCase(),
-    (tier ? "H" : "L") + ptl[11],
-    ...constraints.map((c) => c.toString(16).toUpperCase()),
-  ].join(".");
-}
-
-// chroma format and bit depths, read past the profile in an sps with no sub layers
-function spsFormat(b) {
-  let bit = 13 * 8;
-  const u = (n) => {
-    let v = 0;
-    for (let i = 0; i < n; i++, bit++) v = (v << 1) | ((b[bit >> 3] >> (7 - (bit & 7))) & 1);
-    return v;
-  };
-  const ue = () => {
-    let zeros = 0;
-    while (u(1) === 0) zeros++;
-    return (1 << zeros) - 1 + u(zeros);
-  };
-  ue();
-  const chroma = ue();
-  if (chroma === 3) u(1);
-  ue();
-  ue();
-  if (u(1)) for (let i = 0; i < 4; i++) ue();
-  return { chroma, lumaDepth: ue() + 8, chromaDepth: ue() + 8 };
-}
-
-// a frame's nal units each behind a 4 byte length, the parameter sets already went in the description
+// a frame's nal units each behind a 4 byte length, the sps and pps already went in the description
 function lengthPrefixed(annexB) {
-  const nals = nalUnits(annexB).filter((nal) => nalType(nal) < 32 || nalType(nal) > 34);
+  const nals = nalUnits(annexB).filter((nal) => nalType(nal) !== 7 && nalType(nal) !== 8);
   const out = new Uint8Array(nals.reduce((sum, nal) => sum + 4 + nal.length, 0));
   const view = new DataView(out.buffer);
   let at = 0;
@@ -275,7 +215,7 @@ function lengthPrefixed(annexB) {
   return out;
 }
 
-const nalType = (nal) => (nal[0] >> 1) & 0x3f;
+const nalType = (nal) => nal[0] & 0x1f;
 
 function nalUnits(data) {
   const starts = [];
@@ -291,21 +231,6 @@ function nalUnits(data) {
     while (end > start && data[end - 1] === 0) end--;
     return data.subarray(start, end);
   });
-}
-
-// drops the 3 in each 0 0 3 the encoder adds so the data never looks like a start code
-function unescape(nal) {
-  const out = [];
-  let zeros = 0;
-  for (const byte of nal) {
-    if (zeros >= 2 && byte === 3) {
-      zeros = 0;
-      continue;
-    }
-    out.push(byte);
-    zeros = byte === 0 ? zeros + 1 : 0;
-  }
-  return Uint8Array.from(out);
 }
 
 // ---- touches ----
