@@ -12,6 +12,8 @@ window.bridge = {
   stop: () => invoke("stop"),
   touch: (x, y, down) => invoke("touch", { x, y, down }),
   press: (button) => invoke("press", { button }),
+  // a list of [hid keyboard usage, down] pairs, sent in order
+  keys: (presses) => invoke("keys", { presses }),
   open: (url) => invoke("open_page", { url }),
   log: (text) => invoke("log", { text }),
 };

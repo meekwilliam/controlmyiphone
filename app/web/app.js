@@ -274,6 +274,93 @@ for (const button of document.querySelectorAll("[data-button]")) {
   button.onclick = () => window.bridge.press(button.dataset.button);
 }
 
+// ---- keyboard ----
+
+// keys by their position, to hid keyboard usages, on windows ctrl stands in for the iphone's command key so ctrl+c and
+// ctrl+a do what they would on a pc, and the windows key is left out so it still opens the start menu
+const KEYS = {
+  Enter: 0x28, Escape: 0x29, Backspace: 0x2a, Tab: 0x2b, Space: 0x2c,
+  Minus: 0x2d, Equal: 0x2e, BracketLeft: 0x2f, BracketRight: 0x30, Backslash: 0x31,
+  Semicolon: 0x33, Quote: 0x34, Backquote: 0x35, Comma: 0x36, Period: 0x37, Slash: 0x38, CapsLock: 0x39,
+  Insert: 0x49, Home: 0x4a, PageUp: 0x4b, Delete: 0x4c, End: 0x4d, PageDown: 0x4e,
+  ArrowRight: 0x4f, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
+  ControlLeft: 0xe3, ShiftLeft: 0xe1, AltLeft: 0xe2,
+  ControlRight: 0xe7, ShiftRight: 0xe5, AltRight: 0xe6,
+};
+if (navigator.platform.startsWith("Mac")) {
+  Object.assign(KEYS, { ControlLeft: 0xe0, ControlRight: 0xe4, MetaLeft: 0xe3, MetaRight: 0xe7 });
+}
+const PASTE = navigator.platform.startsWith("Mac") ? "metaKey" : "ctrlKey";
+for (let i = 0; i < 26; i++) KEYS["Key" + String.fromCharCode(65 + i)] = 0x04 + i;
+for (let i = 1; i <= 9; i++) KEYS["Digit" + i] = 0x1d + i;
+KEYS.Digit0 = 0x27;
+
+// keys down on the phone right now, let go of when the window loses focus so none stay stuck
+const held = new Set();
+
+window.addEventListener("keydown", (event) => {
+  const usage = KEYS[event.code];
+  if (!decoder || usage === undefined) return;
+  // ctrl+v pastes this computer's clipboard instead, see the paste handler
+  if (event.code === "KeyV" && event[PASTE]) return;
+  event.preventDefault();
+  // the phone repeats a held key by itself
+  if (event.repeat) return;
+  held.add(usage);
+  window.bridge.keys([[usage, true]]);
+});
+
+window.addEventListener("keyup", (event) => {
+  const usage = KEYS[event.code];
+  if (usage === undefined || !held.has(usage)) return;
+  event.preventDefault();
+  held.delete(usage);
+  window.bridge.keys([[usage, false]]);
+});
+
+window.addEventListener("blur", () => {
+  window.bridge.keys([...held].map((usage) => [usage, false]));
+  held.clear();
+});
+
+// characters to hid usages on a us layout, with whether they need shift
+const TYPED = {};
+"abcdefghijklmnopqrstuvwxyz".split("").forEach((c, i) => {
+  TYPED[c] = [0x04 + i, false];
+  TYPED[c.toUpperCase()] = [0x04 + i, true];
+});
+"1234567890".split("").forEach((c, i) => (TYPED[c] = [0x1e + i, false]));
+"!@#$%^&*()".split("").forEach((c, i) => (TYPED[c] = [0x1e + i, true]));
+for (const [plain, shifted, usage] of [
+  ["-", "_", 0x2d], ["=", "+", 0x2e], ["[", "{", 0x2f], ["]", "}", 0x30], ["\\", "|", 0x31],
+  [";", ":", 0x33], ["'", '"', 0x34], ["`", "~", 0x35], [",", "<", 0x36], [".", ">", 0x37], ["/", "?", 0x38],
+]) {
+  TYPED[plain] = [usage, false];
+  TYPED[shifted] = [usage, true];
+}
+TYPED[" "] = [0x2c, false];
+TYPED["\n"] = [0x28, false];
+TYPED["\t"] = [0x2b, false];
+
+// ctrl+v, or cmd+v on a mac, types out this computer's clipboard on the phone, a key at a time, characters a us keyboard can't type,
+// like emoji, are skipped
+window.addEventListener("paste", (event) => {
+  if (!decoder) return;
+  event.preventDefault();
+  const text = (event.clipboardData?.getData("text") ?? "").replace(/\r\n?/g, "\n");
+  const presses = [];
+  for (const char of text) {
+    const typed = TYPED[char];
+    if (!typed) continue;
+    const [usage, shift] = typed;
+    if (shift) presses.push([0xe1, true]);
+    presses.push([usage, true], [usage, false]);
+    if (shift) presses.push([0xe1, false]);
+  }
+  // one call for the whole text so the keys can't arrive out of order
+  window.bridge.keys(presses);
+});
+
 $("retry").onclick = () => {
   showing = null;
   failed = null;
