@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mirrormyiphone</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav id="tabs"></nav>
+
+<main>
+  <section id="empty">
+    <div class="phone-glyph"></div>
+    <h2 id="empty-title">Plug in an iPhone</h2>
+    <p id="empty-text">Connect it with a cable, unlock it, and tap Trust if it asks.</p>
+    <button id="retry" hidden>Try again</button>
+  </section>
+
+  <section id="screen" hidden>
+    <canvas id="video"></canvas>
+    <div id="status"></div>
+  </section>
+</main>
+
+<footer id="buttons" hidden>
+  <button data-button="volume-down" title="Volume down">－</button>
+  <button data-button="home" title="Home">Home</button>
+  <button data-button="lock" title="Lock">Lock</button>
+  <button data-button="volume-up" title="Volume up">＋</button>
+</footer>
+
+<script src="bridge.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
