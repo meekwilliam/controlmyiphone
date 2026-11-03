@@ -90,6 +90,16 @@ fn press(button: String, showing: State<'_, Showing>) {
     }
 }
 
+/// keyboard keys going down or up, by their hid keyboard usage, in order, a whole pasted text comes as one call
+#[tauri::command]
+fn keys(presses: Vec<(u8, bool)>, showing: State<'_, Showing>) {
+    if let Some(sender) = showing.0.lock().unwrap().as_ref() {
+        for (usage, down) in presses {
+            let _ = sender.send(Input::Key { usage, down });
+        }
+    }
+}
+
 /// the page's errors, for whoever runs the app from a terminal
 #[tauri::command]
 fn log(text: String) {
@@ -112,7 +122,7 @@ fn main() {
     tauri::Builder::default()
         .manage(Showing::default())
         .invoke_handler(tauri::generate_handler![
-            phones, show, stop, touch, press, open_page, log
+            phones, show, stop, touch, press, keys, open_page, log
         ])
         .run(tauri::generate_context!())
         .expect("couldn't start mirrormyiphone");

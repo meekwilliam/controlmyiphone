@@ -133,6 +133,8 @@ pub enum Input {
         y: u16,
     },
     Button(Button),
+    /// a keyboard key going down or up, by its hid keyboard usage, like 0x04 for a and 0xE1 for left shift
+    Key { usage: u8, down: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -405,7 +407,7 @@ impl Feedback {
     }
 }
 
-/// the phone's touch screen and buttons, connected on first use, each is its own service
+/// the phone's touch screen, and its buttons and keyboard, connected on first use, each is its own service
 #[derive(Default)]
 struct Controls {
     touch: Option<UniversalHidServiceClient<Box<dyn ReadWrite>>>,
@@ -442,6 +444,17 @@ impl Controls {
                     buttons.send_button(page, usage, ButtonState::Up).await
                 };
                 if let Err(e) = pressed.await {
+                    self.buttons = None;
+                    return Err(e.into());
+                }
+            }
+            Input::Key { usage, down } => {
+                if self.buttons.is_none() {
+                    self.buttons = Some(IndigoHidClient::connect_rsd(adapter, handshake).await?);
+                }
+                let keys = self.buttons.as_mut().expect("just connected");
+                let state = if down { ButtonState::Down } else { ButtonState::Up };
+                if let Err(e) = keys.send_keyboard(usage as u64, state).await {
                     self.buttons = None;
                     return Err(e.into());
                 }
