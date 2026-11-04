@@ -378,6 +378,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
+name = "controlmyiphone-app"
+version = "1.0.0"
+dependencies = [
+ "controlmyiphone-core",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+]
+
+[[package]]
+name = "controlmyiphone-core"
+version = "1.0.0"
+dependencies = [
+ "dirs",
+ "flate2",
+ "idevice",
+ "plist",
+ "serde",
+ "tokio",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "cookie"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1936,31 +1961,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mirrormyiphone-app"
-version = "1.0.0"
-dependencies = [
- "mirrormyiphone-core",
- "serde_json",
- "tauri",
- "tauri-build",
- "tokio",
-]
-
-[[package]]
-name = "mirrormyiphone-core"
-version = "1.0.0"
-dependencies = [
- "dirs",
- "flate2",
- "idevice",
- "plist",
- "serde",
- "tokio",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

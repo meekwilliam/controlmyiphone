@@ -1,4 +1,4 @@
-# licenses cargo-about accepts when listing the packages compiled into mirrormyiphone.exe
+# licenses cargo-about accepts when listing the packages compiled into controlmyiphone.exe
 accepted = [
     "MIT",
     "Apache-2.0",

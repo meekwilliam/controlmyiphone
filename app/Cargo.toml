@@ -1,20 +1,20 @@
 [package]
-name = "mirrormyiphone-app"
+name = "controlmyiphone-app"
 version = "1.0.0"
 edition = "2024"
 license = "MIT"
-description = "mirrormyiphone's window: an iPhone's screen, live, on the same Rust engine for Windows and Mac"
-repository = "https://github.com/meekwilliam/mirrormyiphone"
+description = "controlmyiphone's window: an iPhone's screen, live, on the same Rust engine for Windows and Mac"
+repository = "https://github.com/meekwilliam/controlmyiphone"
 
 [[bin]]
-name = "mirrormyiphone"
+name = "controlmyiphone"
 path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "=2.7.3", features = [] }
 
 [dependencies]
-mirrormyiphone-core = { path = "../core" }
+controlmyiphone-core = { path = "../core" }
 # custom-protocol serves web/ from inside the exe instead of a dev server
 tauri = { version = "=2.12.4", features = ["custom-protocol"] }
 tokio = { version = "1.54", features = ["rt", "time", "sync"] }

@@ -1,16 +1,16 @@
-//! mirrormyiphone-cli, the engine on its own, for testing without the app
+//! controlmyiphone-cli, the engine on its own, for testing without the app
 //!
-//!   mirrormyiphone-cli list
-//!   mirrormyiphone-cli stream <udid> [seconds] > screen.h265
-//!   mirrormyiphone-cli tap <udid> <x> <y>        x and y from 0 to 65535 across the screen
-//!   mirrormyiphone-cli button <udid> home|lock|volume-up|volume-down
+//!   controlmyiphone-cli list
+//!   controlmyiphone-cli stream <udid> [seconds] > screen.h264
+//!   controlmyiphone-cli tap <udid> <x> <y>        x and y from 0 to 65535 across the screen
+//!   controlmyiphone-cli button <udid> home|lock|volume-up|volume-down
 
 use std::{
     io::Write,
     time::{Duration, Instant},
 };
 
-use mirrormyiphone_core::{self as engine, Button, Frame, Input};
+use controlmyiphone_core::{self as engine, Button, Frame, Input};
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -35,7 +35,7 @@ async fn main() {
         },
         _ => {
             eprintln!(
-                "usage: mirrormyiphone-cli list | stream <udid> [seconds] | tap <udid> <x> <y> | button <udid> <name>"
+                "usage: controlmyiphone-cli list | stream <udid> [seconds] | tap <udid> <x> <y> | button <udid> <name>"
             );
             std::process::exit(2);
         }
@@ -66,7 +66,7 @@ async fn list() -> engine::Result<()> {
     Ok(())
 }
 
-/// writes the screen to stdout as an hevc stream ffplay or vlc can play, with a frame count on stderr
+/// writes the screen to stdout as an h.264 stream ffplay or vlc can play, with a frame count on stderr
 async fn stream(udid: &str, seconds: Option<u64>) -> engine::Result<()> {
     let (_inputs, received) = mpsc::unbounded_channel();
     let mut out = std::io::BufWriter::new(std::io::stdout());
