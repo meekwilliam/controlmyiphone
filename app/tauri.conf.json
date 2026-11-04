@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mirrormyiphone",
+  "productName": "controlmyiphone",
   "version": "1.0.0",
-  "identifier": "com.meekwilliam.mirrormyiphone",
+  "identifier": "com.meekwilliam.controlmyiphone",
   "build": {
     "frontendDist": "web"
   },
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "mirrormyiphone",
+        "title": "controlmyiphone",
         "width": 440,
         "height": 900,
         "minWidth": 300,

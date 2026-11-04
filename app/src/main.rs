@@ -1,12 +1,12 @@
 // no console window behind the app in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! mirrormyiphone's window, the page in web/ plus these commands, which call the engine in core/, the page decodes
-//! the video itself with the computer's own hevc decoder, so the frames go to it untouched
+//! controlmyiphone's window, the page in web/ plus these commands, which call the engine in core/, the page decodes
+//! the video itself with the computer's own h.264 decoder, so the frames go to it untouched
 
 use std::sync::Mutex;
 
-use mirrormyiphone_core::{self as engine, Button, Frame, Input};
+use controlmyiphone_core::{self as engine, Button, Frame, Input};
 use serde_json::{Value, json};
 use tauri::{
     State,
@@ -29,7 +29,7 @@ async fn phones() -> Value {
 }
 
 /// streams the phone's screen to the page until `stop`, another `show`, or the page going away, each message is
-/// one frame, a first byte of 1 for a key frame, then the hevc data
+/// one frame, a first byte of 1 for a key frame, then the h.264 data
 #[tauri::command]
 async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<'_, Showing>) -> Result<(), String> {
     let (sender, inputs) = mpsc::unbounded_channel();
@@ -106,10 +106,10 @@ fn log(text: String) {
     eprintln!("page: {text}");
 }
 
-/// only ever opens mirrormyiphone's own github pages
+/// only ever opens controlmyiphone's own github pages
 #[tauri::command]
 fn open_page(url: String) {
-    if !url.starts_with("https://github.com/meekwilliam/mirrormyiphone") {
+    if !url.starts_with("https://github.com/meekwilliam/controlmyiphone") {
         return;
     }
     #[cfg(windows)]
@@ -125,5 +125,5 @@ fn main() {
             phones, show, stop, touch, press, keys, open_page, log
         ])
         .run(tauri::generate_context!())
-        .expect("couldn't start mirrormyiphone");
+        .expect("couldn't start controlmyiphone");
 }

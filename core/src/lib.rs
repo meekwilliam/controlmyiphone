@@ -1,4 +1,4 @@
-//! mirrormyiphone's engine, shows an iphone's screen live and passes clicks back to it as touches, with no xcode
+//! controlmyiphone's engine, shows an iphone's screen live and passes clicks back to it as touches, with no xcode
 //! and no app on the phone
 //!
 //! it uses the screen sharing xcode 27's device hub uses, the phone's coredevice display service sends its screen as
@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 
 mod h264;
 
-const LABEL: &str = "mirrormyiphone";
+const LABEL: &str = "controlmyiphone";
 
 /// screen sharing came with ios 27, ios 26 accepts the request but never sends a frame
 const FIRST_IOS: u64 = 27;
@@ -377,7 +377,7 @@ struct Feedback {
 }
 
 impl Feedback {
-    const NAME: &str = "mirrormyiphone";
+    const NAME: &str = "controlmyiphone";
 
     fn new(ssrc: u32) -> Self {
         Feedback {
@@ -638,10 +638,10 @@ async fn developer_disk_image() -> Result<[Vec<u8>; 3]> {
     Ok(files.try_into().expect("three files"))
 }
 
-/// where mirrormyiphone keeps its files, %APPDATA%\mirrormyiphone on windows,
-/// ~/Library/Application Support/mirrormyiphone on a mac
+/// where controlmyiphone keeps its files, %APPDATA%\controlmyiphone on windows,
+/// ~/Library/Application Support/controlmyiphone on a mac
 pub fn app_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(std::env::temp_dir)
-        .join("mirrormyiphone")
+        .join("controlmyiphone")
 }

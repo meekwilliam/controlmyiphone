@@ -1,16 +1,16 @@
 [package]
-name = "mirrormyiphone-core"
+name = "controlmyiphone-core"
 version = "1.0.0"
 edition = "2024"
 license = "MIT"
-description = "mirrormyiphone's engine: streams an iPhone's screen live and passes clicks back to it as touches"
-repository = "https://github.com/meekwilliam/mirrormyiphone"
+description = "controlmyiphone's engine: streams an iPhone's screen live and passes clicks back to it as touches"
+repository = "https://github.com/meekwilliam/controlmyiphone"
 
 [lib]
-name = "mirrormyiphone_core"
+name = "controlmyiphone_core"
 
 [[bin]]
-name = "mirrormyiphone-cli"
+name = "controlmyiphone-cli"
 path = "src/main.rs"
 
 [dependencies]

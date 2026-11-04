@@ -1,9 +1,9 @@
-# mirrormyiphone: your iPhone's screen on your PC
+# controlmyiphone: your iPhone's screen on your PC
 
 **See your iPhone's screen live in a window on your Windows PC, for free.** Plug it in and it shows up at up to 60 frames per second, full resolution. Click and drag on it to tap and swipe. You don't need a jailbreak or an app on the phone.
 
 <p>
-  <a href="https://github.com/meekwilliam/mirrormyiphone/releases/latest/download/mirrormyiphone.exe"><img alt="Download for Windows" src="https://img.shields.io/badge/Download_for-Windows-1f6feb?style=for-the-badge"></a>
+  <a href="https://github.com/meekwilliam/controlmyiphone/releases/latest/download/controlmyiphone.exe"><img alt="Download for Windows" src="https://img.shields.io/badge/Download_for-Windows-1f6feb?style=for-the-badge"></a>
 </p>
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -14,11 +14,10 @@
 
 - An iPhone on **iOS 27 or newer**, with **Developer Mode** on (Settings › Privacy & Security › Developer Mode).
 - **Windows 10 or 11** with [**Apple Devices**](https://apps.microsoft.com/detail/9np83lwlpz9k) from the Microsoft Store, which gives Windows the iPhone driver.
-- A PC that can play HEVC video. Most PCs from 2016 on can. If yours can't, mirrormyiphone tells you to install **HEVC Video Extensions** from the Microsoft Store.
 
 ## Install
 
-[Download `mirrormyiphone.exe`](https://github.com/meekwilliam/mirrormyiphone/releases/latest/download/mirrormyiphone.exe) and run it. SmartScreen may warn that it's unrecognized, because it isn't code-signed. Choose **More info › Run anyway**.
+[Download `controlmyiphone.exe`](https://github.com/meekwilliam/controlmyiphone/releases/latest/download/controlmyiphone.exe) and run it. SmartScreen may warn that it's unrecognized, because it isn't code-signed. Choose **More info › Run anyway**.
 
 ## Use
 
