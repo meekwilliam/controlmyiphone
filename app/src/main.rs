@@ -1,18 +1,29 @@
 // no console window behind the app in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::Mutex;
+use std::{sync::Mutex, thread::JoinHandle, time::Duration};
 
 use controlmyiphone_core::{self as engine, Button, Frame, Input};
 use serde_json::{Value, json};
 use tauri::{
-    State,
+    AppHandle, Manager, RunEvent, State, WindowEvent,
     ipc::{Channel, InvokeResponseBody},
 };
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Default)]
-struct Showing(Mutex<Option<mpsc::UnboundedSender<Input>>>);
+struct Showing {
+    inputs: Mutex<Option<mpsc::UnboundedSender<Input>>>,
+    streams: Mutex<Vec<JoinHandle<()>>>,
+}
+
+impl Showing {
+    fn send(&self, input: Input) {
+        if let Some(sender) = self.inputs.lock().unwrap().as_ref() {
+            let _ = sender.send(input);
+        }
+    }
+}
 
 #[tauri::command]
 async fn phones() -> Value {
@@ -29,7 +40,7 @@ async fn phones() -> Value {
 async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<'_, Showing>) -> Result<(), String> {
     let (sender, inputs) = mpsc::unbounded_channel();
     // replacing the old sender ends the screen shown before
-    *showing.0.lock().unwrap() = Some(sender);
+    *showing.inputs.lock().unwrap() = Some(sender);
     let send = move |frame: Frame| {
         let mut message = Vec::with_capacity(frame.data.len() + 1);
         message.push(frame.key as u8);
@@ -39,7 +50,7 @@ async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<
     // the engine's future isn't Send, so it gets a thread and runtime of its own, which also keeps the video off
     // the threads the window's other commands run on
     let (done, finished) = oneshot::channel();
-    std::thread::spawn(move || {
+    let stream = std::thread::spawn(move || {
         let result = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(runtime) => runtime
                 .block_on(engine::mirror(&udid, send, inputs))
@@ -48,6 +59,7 @@ async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<
         };
         let _ = done.send(result);
     });
+    showing.streams.lock().unwrap().push(stream);
     finished
         .await
         .unwrap_or_else(|_| Err("The screen stopped unexpectedly.".into()))
@@ -55,7 +67,7 @@ async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<
 
 #[tauri::command]
 fn stop(showing: State<'_, Showing>) {
-    showing.0.lock().unwrap().take();
+    showing.inputs.lock().unwrap().take();
 }
 
 #[tauri::command]
@@ -65,9 +77,7 @@ fn touch(x: u16, y: u16, down: bool, showing: State<'_, Showing>) {
     } else {
         Input::Lift { x, y }
     };
-    if let Some(sender) = showing.0.lock().unwrap().as_ref() {
-        let _ = sender.send(input);
-    }
+    showing.send(input);
 }
 
 #[tauri::command]
@@ -80,17 +90,13 @@ fn press(button: String, showing: State<'_, Showing>) {
         "volume-down" => Button::VolumeDown,
         _ => return,
     };
-    if let Some(sender) = showing.0.lock().unwrap().as_ref() {
-        let _ = sender.send(Input::Button(button));
-    }
+    showing.send(Input::Button(button));
 }
 
 #[tauri::command]
 fn keys(presses: Vec<(u8, bool)>, showing: State<'_, Showing>) {
-    if let Some(sender) = showing.0.lock().unwrap().as_ref() {
-        for (usage, down) in presses {
-            let _ = sender.send(Input::Key { usage, down });
-        }
+    for (usage, down) in presses {
+        showing.send(Input::Key { usage, down });
     }
 }
 
@@ -110,12 +116,54 @@ fn open_page(url: String) {
     let _ = std::process::Command::new("open").arg(&url).spawn();
 }
 
+/// tells the phone to stop sharing before quitting, returns false when nothing was being shown
+fn stop_then_exit(app: &AppHandle) -> bool {
+    let showing = app.state::<Showing>();
+    let streams = std::mem::take(&mut *showing.streams.lock().unwrap());
+    if streams.is_empty() {
+        return false;
+    }
+    showing.inputs.lock().unwrap().take();
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let (stopped, wait) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for stream in streams {
+                let _ = stream.join();
+            }
+            let _ = stopped.send(());
+        });
+        // a phone that stopped answering mustn't keep the app open
+        let _ = wait.recv_timeout(Duration::from_secs(3));
+        app.exit(0);
+    });
+    true
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Showing::default())
+        // just quitting leaves the phone sharing its screen, with the recording indicator on, for up to an hour
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && stop_then_exit(window.app_handle())
+            {
+                api.prevent_close();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             phones, show, stop, touch, press, keys, open_page, log
         ])
-        .run(tauri::generate_context!())
-        .expect("couldn't start controlmyiphone");
+        .build(tauri::generate_context!())
+        .expect("couldn't start controlmyiphone")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, .. } = event
+                && stop_then_exit(app)
+            {
+                api.prevent_exit();
+            }
+        });
 }
