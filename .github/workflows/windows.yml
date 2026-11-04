@@ -1,8 +1,5 @@
 name: Windows build
 
-# controlmyiphone.exe for windows, the tauri app in app/ on the rust engine in core/, the iphone driver comes from
-# apple devices
-
 on:
   push:
     branches: [main]

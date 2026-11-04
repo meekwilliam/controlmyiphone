@@ -1,12 +1,3 @@
-//! controlmyiphone's engine, shows an iphone's screen live and passes clicks back to it as touches, with no xcode
-//! and no app on the phone
-//!
-//! it uses the screen sharing xcode 27's device hub uses, the phone's coredevice display service sends its screen as
-//! h.264 video over apple's developer tunnel, and its hid services take touches and button presses, which the phone
-//! only acts on while that video runs, the tunnel runs on a userspace tcp stack so nothing needs admin rights, the
-//! iphone is reached through apple's device service, `usbmuxd`, which macos has built in and windows gets from the
-//! apple devices app
-
 use std::{
     fmt,
     future::Future,
@@ -36,22 +27,19 @@ mod h264;
 
 const LABEL: &str = "controlmyiphone";
 
-/// screen sharing came with ios 27, ios 26 accepts the request but never sends a frame
+// ios 26 accepts the request but never sends a frame
 const FIRST_IOS: u64 = 27;
 
-/// apple's personalized developer disk image, the same files xcode ships, mirrored on github
 const DDI_URL: &str =
     "https://raw.githubusercontent.com/doronz88/DeveloperDiskImage/main/PersonalizedImages/Xcode_iOS_DDI_Personalized";
 const DDI_FILES: [&str; 3] = ["Image.dmg", "Image.dmg.trustcache", "BuildManifest.plist"];
 
-/// what this side says it supports, device hub sends 140, the phone's own bigger mask gets an unusable video setup
+// device hub sends 140, the phone's own bigger mask gets an unusable video setup
 const CLIENT_FEATURES: u64 = 140;
 
 #[derive(Debug)]
 pub enum Error {
-    /// no iphone with that udid is connected by cable or visible on wi-fi right now
     NotFound(String),
-    /// something the iphone or apple's servers answered with
     Device(IdeviceError),
     Other(String),
 }
@@ -106,61 +94,45 @@ pub struct Phone {
     pub udid: String,
     pub name: String,
     pub link: Link,
-    /// like "27.0.1", when the phone says
     pub ios: Option<String>,
-    /// whether developer mode is on, when the phone says
     pub developer_mode: Option<bool>,
 }
 
-/// one picture of the screen, an annex-b h.264 access unit, a key frame carries the parameter sets with it so a
-/// decoder can start there
 pub struct Frame {
     pub data: Vec<u8>,
     pub key: bool,
 }
 
-/// a touch or button press for the phone, x and y run 0 to 65535 across the screen as the video shows it
 #[derive(Debug, Clone, Copy)]
 pub enum Input {
-    /// a finger on the screen, send it again as it moves
-    Touch {
-        x: u16,
-        y: u16,
-    },
-    /// the finger lifts
-    Lift {
-        x: u16,
-        y: u16,
-    },
+    Touch { x: u16, y: u16 },
+    Lift { x: u16, y: u16 },
     Button(Button),
-    /// a keyboard key going down or up, by its hid keyboard usage, like 0x04 for a and 0xE1 for left shift
-    Key {
-        usage: u8,
-        down: bool,
-    },
+    Key { usage: u8, down: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Button {
     Home,
+    AppSwitcher,
     Lock,
     VolumeUp,
     VolumeDown,
 }
 
 impl Button {
-    /// hid usage page, usage and how long it's held, the lock button needs a longer press than the others
-    fn usage(self) -> (u64, u64, u64) {
+    // usage page, usage, hold ms, presses
+    fn usage(self) -> (u64, u64, u64, usize) {
         match self {
-            Button::Home => (0x0C, 0x40, 80),
-            Button::Lock => (0x0C, 0x30, 200),
-            Button::VolumeUp => (0x0C, 0xE9, 80),
-            Button::VolumeDown => (0x0C, 0xEA, 80),
+            Button::Home => (0x0C, 0x40, 80, 1),
+            Button::AppSwitcher => (0x0C, 0x40, 60, 2),
+            Button::Lock => (0x0C, 0x30, 200, 1),
+            Button::VolumeUp => (0x0C, 0xE9, 80, 1),
+            Button::VolumeDown => (0x0C, 0xEA, 80, 1),
         }
     }
 }
 
-/// the iphones apple's device service sees, one entry each, by cable when both are available
 pub async fn phones() -> Result<Vec<Phone>> {
     let mut found: Vec<Phone> = Vec::new();
     for device in devices().await? {
@@ -193,8 +165,6 @@ pub async fn phones() -> Result<Vec<Phone>> {
     Ok(found)
 }
 
-/// streams the phone's screen to `show` until it returns false or `inputs` closes, and passes each input to the
-/// phone along the way
 pub async fn mirror(
     udid: &str,
     mut show: impl FnMut(Frame) -> bool,
@@ -292,30 +262,26 @@ pub async fn mirror(
     result
 }
 
-/// a sleeping phone can leave a connection hanging, give up after a minute so the app never waits forever
 pub async fn within_a_minute<T>(action: impl Future<Output = Result<T>>) -> Result<T> {
     tokio::time::timeout(Duration::from_secs(60), action)
         .await
         .unwrap_or(Err(Error::Device(IdeviceError::Timeout)))
 }
 
-/// the last four characters of a udid, enough to tell phones apart in names and logs
 pub fn short_udid(udid: &str) -> &str {
     &udid[udid.len().saturating_sub(4)..]
 }
 
-/// the phone's screen sharing session, the sockets have to stay open while it runs or the phone stops sending
+// the sockets have to stay open or the phone stops sending
 struct Screen {
     client: DisplayServiceClient<Box<dyn ReadWrite>>,
     _audio: UdpSocketHandle,
     video: UdpSocketHandle,
-    /// the id this side gave its video stream in the offer, rtcp sent back has to use it
     ssrc: u32,
 }
 
 impl Screen {
-    /// starts screen sharing the way device hub does, an audio stream first to set up the session, the video stream
-    /// fails without it, then video on the same session id
+    // like device hub, audio first to set up the session, video fails without it
     async fn start(adapter: &mut AdapterHandle, handshake: &mut RsdHandshake) -> Result<Self> {
         let mut client = DisplayServiceClient::connect_rsd(adapter, handshake).await?;
         let audio = adapter.bind_udp(0).await?;
@@ -370,10 +336,8 @@ impl Screen {
     }
 }
 
-/// rtcp back to the phone, the reports device hub sends every second, and key frame requests after a loss
 struct Feedback {
     ssrc: u32,
-    /// the port the phone sends from and its video stream's id, known once video arrives
     phone: Option<(u16, u32)>,
     asked: Option<Instant>,
     requests: u8,
@@ -397,7 +361,6 @@ impl Feedback {
         }
     }
 
-    /// at most once a second, the phone may take a moment to answer and the loss repeats until it does
     async fn ask_for_key_frame(&mut self, video: &UdpSocketHandle) {
         let Some((port, media)) = self.phone else { return };
         if self.asked.is_some_and(|at| at.elapsed() < Duration::from_secs(1)) {
@@ -410,7 +373,6 @@ impl Feedback {
     }
 }
 
-/// the phone's touch screen, and its buttons and keyboard, connected on first use, each is its own service
 #[derive(Default)]
 struct Controls {
     touch: Option<UniversalHidServiceClient<Box<dyn ReadWrite>>>,
@@ -440,11 +402,17 @@ impl Controls {
                     self.buttons = Some(IndigoHidClient::connect_rsd(adapter, handshake).await?);
                 }
                 let buttons = self.buttons.as_mut().expect("just connected");
-                let (page, usage, hold) = button.usage();
+                let (page, usage, hold, presses) = button.usage();
                 let pressed = async {
-                    buttons.send_button(page, usage, ButtonState::Down).await?;
-                    tokio::time::sleep(Duration::from_millis(hold)).await;
-                    buttons.send_button(page, usage, ButtonState::Up).await
+                    for press in 0..presses {
+                        if press > 0 {
+                            tokio::time::sleep(Duration::from_millis(hold)).await;
+                        }
+                        buttons.send_button(page, usage, ButtonState::Down).await?;
+                        tokio::time::sleep(Duration::from_millis(hold)).await;
+                        buttons.send_button(page, usage, ButtonState::Up).await?;
+                    }
+                    Ok::<(), IdeviceError>(())
                 };
                 if let Err(e) = pressed.await {
                     self.buttons = None;
@@ -467,13 +435,11 @@ impl Controls {
     }
 }
 
-/// the stream's parameter sets, sps and pps, a decoder can't start without them, a fresh depacketizer after a
-/// loss no longer has them to put in front of the next key frame
+// a fresh depacketizer after a loss no longer has the sps and pps to put in front of the next key frame
 #[derive(Default)]
 struct Setup(Vec<u8>);
 
 impl Setup {
-    /// remembers the parameter sets a key frame carries, or puts the remembered ones in front if it has none
     fn attach(&mut self, frame: Vec<u8>) -> Vec<u8> {
         let sets: Vec<u8> = nal_units(&frame)
             .filter(|nal| matches!(nal[0] & 0x1F, 7 | 8))
@@ -487,7 +453,6 @@ impl Setup {
     }
 }
 
-/// the nal units in annex-b data, without their start codes
 fn nal_units(data: &[u8]) -> impl Iterator<Item = &[u8]> {
     let mut starts = Vec::new();
     let mut i = 0;
@@ -516,7 +481,6 @@ async fn devices() -> Result<Vec<UsbmuxdDevice>> {
     Ok(usbmuxd.get_devices().await?)
 }
 
-/// a connection to the phone through apple's device service, preferring the cable over wi-fi
 async fn provider(udid: &str) -> Result<impl IdeviceProvider> {
     let mut matching: Vec<UsbmuxdDevice> = devices().await?.into_iter().filter(|d| d.udid == udid).collect();
     matching.sort_by_key(|d| !matches!(d.connection_type, Connection::Usb));
@@ -527,7 +491,6 @@ async fn provider(udid: &str) -> Result<impl IdeviceProvider> {
     Ok(device.to_provider(UsbmuxdAddr::default(), LABEL))
 }
 
-/// reads a lockdown value, starting a paired session if the phone won't answer without one
 async fn lockdown_value_in(provider: &dyn IdeviceProvider, key: &str, domain: Option<&str>) -> Result<plist::Value> {
     let mut lockdown = LockdownClient::connect(provider).await?;
     match lockdown.get_value(Some(key), domain).await {
@@ -572,10 +535,8 @@ async fn chip_id(provider: &dyn IdeviceProvider) -> Result<u64> {
         .ok_or_else(|| Error::Other("The iPhone didn't report its chip ID.".into()))
 }
 
-/// loads the developer tools on the phone if a restart unloaded them, over the plain lockdown connection,
-/// uploading the 15 mb image works there over usb, the tunnel's userspace tcp stack times out on it, and over wi-fi
-/// the phone closes lockdown mid-upload, so that case falls back to `load_developer_tools_tunneled`, returns
-/// whether the tools are loaded
+// over usb the upload works through lockdown but the tunnel's userspace tcp times out on it, over wi-fi it's the
+// other way round, so false here means try `load_developer_tools_tunneled`
 async fn load_developer_tools(provider: &dyn IdeviceProvider) -> Result<bool> {
     let mut mounter = ImageMounter::connect(provider).await?;
     if has_developer_tools(&mounter.copy_devices().await?) {
@@ -596,7 +557,6 @@ async fn load_developer_tools(provider: &dyn IdeviceProvider) -> Result<bool> {
     }
 }
 
-/// the same through the developer tunnel, for when lockdown couldn't, like over wi-fi
 async fn load_developer_tools_tunneled(
     provider: &dyn IdeviceProvider,
     adapter: &mut impl RsdProvider,
@@ -615,7 +575,6 @@ async fn load_developer_tools_tunneled(
     Ok(())
 }
 
-/// apple's developer disk image files, downloaded once and cached
 async fn developer_disk_image() -> Result<[Vec<u8>; 3]> {
     let dir = app_dir().join("DeveloperDiskImage");
     tokio::fs::create_dir_all(&dir).await?;
@@ -641,8 +600,6 @@ async fn developer_disk_image() -> Result<[Vec<u8>; 3]> {
     Ok(files.try_into().expect("three files"))
 }
 
-/// where controlmyiphone keeps its files, %APPDATA%\controlmyiphone on windows,
-/// ~/Library/Application Support/controlmyiphone on a mac
 pub fn app_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(std::env::temp_dir)

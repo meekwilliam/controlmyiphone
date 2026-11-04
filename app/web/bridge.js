@@ -1,9 +1,7 @@
-// connects the page to the app's rust commands in src/main.rs
 const { invoke, Channel } = window.__TAURI__.core;
 
 window.bridge = {
   phones: () => invoke("phones"),
-  // onFrame gets each frame's bytes, the promise settles when the screen stops
   show: (udid, onFrame) => {
     const frames = new Channel();
     frames.onmessage = (data) => onFrame(new Uint8Array(data));
@@ -12,7 +10,6 @@ window.bridge = {
   stop: () => invoke("stop"),
   touch: (x, y, down) => invoke("touch", { x, y, down }),
   press: (button) => invoke("press", { button }),
-  // a list of [hid keyboard usage, down] pairs, sent in order
   keys: (presses) => invoke("keys", { presses }),
   open: (url) => invoke("open_page", { url }),
   log: (text) => invoke("log", { text }),
