@@ -134,7 +134,10 @@ pub enum Input {
     },
     Button(Button),
     /// a keyboard key going down or up, by its hid keyboard usage, like 0x04 for a and 0xE1 for left shift
-    Key { usage: u8, down: bool },
+    Key {
+        usage: u8,
+        down: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
