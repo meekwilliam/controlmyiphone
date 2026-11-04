@@ -1,9 +1,6 @@
 // no console window behind the app in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! controlmyiphone's window, the page in web/ plus these commands, which call the engine in core/, the page decodes
-//! the video itself with the computer's own h.264 decoder, so the frames go to it untouched
-
 use std::sync::Mutex;
 
 use controlmyiphone_core::{self as engine, Button, Frame, Input};
@@ -14,7 +11,6 @@ use tauri::{
 };
 use tokio::sync::{mpsc, oneshot};
 
-/// where the page's clicks go, the screen being shown right now, none while nothing is
 #[derive(Default)]
 struct Showing(Mutex<Option<mpsc::UnboundedSender<Input>>>);
 
@@ -28,8 +24,7 @@ async fn phones() -> Value {
     }
 }
 
-/// streams the phone's screen to the page until `stop`, another `show`, or the page going away, each message is
-/// one frame, a first byte of 1 for a key frame, then the h.264 data
+// each message is a byte of 1 for a key frame, then the frame's annex-b h.264
 #[tauri::command]
 async fn show(udid: String, frames: Channel<InvokeResponseBody>, showing: State<'_, Showing>) -> Result<(), String> {
     let (sender, inputs) = mpsc::unbounded_channel();
@@ -63,7 +58,6 @@ fn stop(showing: State<'_, Showing>) {
     showing.0.lock().unwrap().take();
 }
 
-/// a finger at x, y, from 0 to 65535 across the screen, `down` false lifts it
 #[tauri::command]
 fn touch(x: u16, y: u16, down: bool, showing: State<'_, Showing>) {
     let input = if down {
@@ -80,6 +74,7 @@ fn touch(x: u16, y: u16, down: bool, showing: State<'_, Showing>) {
 fn press(button: String, showing: State<'_, Showing>) {
     let button = match button.as_str() {
         "home" => Button::Home,
+        "app-switcher" => Button::AppSwitcher,
         "lock" => Button::Lock,
         "volume-up" => Button::VolumeUp,
         "volume-down" => Button::VolumeDown,
@@ -90,7 +85,6 @@ fn press(button: String, showing: State<'_, Showing>) {
     }
 }
 
-/// keyboard keys going down or up, by their hid keyboard usage, in order, a whole pasted text comes as one call
 #[tauri::command]
 fn keys(presses: Vec<(u8, bool)>, showing: State<'_, Showing>) {
     if let Some(sender) = showing.0.lock().unwrap().as_ref() {
@@ -100,13 +94,11 @@ fn keys(presses: Vec<(u8, bool)>, showing: State<'_, Showing>) {
     }
 }
 
-/// the page's errors, for whoever runs the app from a terminal
 #[tauri::command]
 fn log(text: String) {
     eprintln!("page: {text}");
 }
 
-/// only ever opens controlmyiphone's own github pages
 #[tauri::command]
 fn open_page(url: String) {
     if !url.starts_with("https://github.com/meekwilliam/controlmyiphone") {

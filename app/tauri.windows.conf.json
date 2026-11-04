@@ -1,0 +1,16 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "controlmyiphone",
+        "width": 380,
+        "height": 824,
+        "minWidth": 200,
+        "minHeight": 430,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false
+      }
+    ]
+  }
+}

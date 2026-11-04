@@ -1,16 +1,15 @@
 :root {
   --bg: #f4f5f7;
-  --card: #ffffff;
   --text: #111418;
   --muted: #5f6670;
   --line: rgba(0, 0, 0, 0.1);
   --accent: #0a84ff;
   --warn: #c2410c;
+  --bar: rgba(30, 30, 32, 0.72);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15171a;
-    --card: #202328;
+    --bg: #1c1d20;
     --text: #f2f4f7;
     --muted: #a3a9b2;
     --line: rgba(255, 255, 255, 0.12);
@@ -19,50 +18,61 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
 body {
-  display: flex; flex-direction: column;
-  background: var(--bg);
   color: var(--text);
   font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   user-select: none; -webkit-user-select: none;
 }
 [hidden] { display: none !important; }
-button {
-  font: inherit; color: var(--text); background: var(--card);
+
+#stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+#video { max-width: 100%; max-height: 100%; background: #000; cursor: default; touch-action: none; }
+
+#empty {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; background: var(--bg); border-radius: 28px;
+}
+#empty h2 { margin: 16px 0 6px; }
+#empty p { max-width: 300px; margin: 0 0 14px; color: var(--muted); }
+#empty.problem h2 { color: var(--warn); }
+#empty button {
+  font: inherit; color: var(--text); background: transparent;
   border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, var(--card)); }
+.phone-glyph { width: 46px; height: 84px; border: 4px solid var(--muted); border-radius: 12px; opacity: 0.6; }
 
-#tabs {
-  display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-}
-#tabs:empty { display: none; }
-.tab { border-radius: 999px; background: transparent; border-color: transparent; }
-.tab.selected { background: color-mix(in srgb, var(--accent) 18%, transparent); font-weight: 600; }
-
-main { flex: 1; min-height: 0; display: flex; }
-
-#empty { margin: auto; text-align: center; padding: 20px; }
-#empty h2 { margin: 16px 0 6px; }
-#empty p { max-width: 340px; margin: 0 auto 14px; color: var(--muted); }
-#empty.problem h2 { color: var(--warn); }
-.phone-glyph {
-  width: 46px; height: 84px; margin: 0 auto; border: 4px solid var(--muted); border-radius: 12px; opacity: 0.6;
-}
-
-#screen { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 10px; }
-#video {
-  max-width: 100%; max-height: 100%;
-  border-radius: 18px; background: #000; cursor: pointer; touch-action: none;
-}
 #status {
-  position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; pointer-events: none;
-  color: var(--muted); font-size: 12px;
+  position: absolute; left: 0; right: 0; bottom: 24px; text-align: center; pointer-events: none;
+  color: #fff; font-size: 12px; text-shadow: 0 1px 3px #000;
 }
 #status:empty { display: none; }
 
-#buttons { display: flex; justify-content: center; gap: 8px; padding: 8px 12px 12px; }
-#buttons button { min-width: 48px; }
+#bar {
+  position: absolute; z-index: 2; top: 8px; left: 50%; transform: translate(-50%, -4px);
+  display: flex; gap: 10px; padding: 4px; border-radius: 14px;
+  background: var(--bar); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  opacity: 0; transition: opacity 0.18s, transform 0.18s; pointer-events: none;
+}
+body.awake #bar, #bar:hover { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#bar .group { display: flex; gap: 2px; }
+#bar button {
+  width: 30px; height: 28px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#bar button:hover { background: rgba(255, 255, 255, 0.16); }
+#bar button:active { background: rgba(255, 255, 255, 0.28); }
+#bar svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+#close:hover { background: #e5484d !important; }
+
+#tabs {
+  position: absolute; z-index: 1; top: 48px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px;
+  opacity: 0; transition: opacity 0.18s;
+}
+body.awake #tabs { opacity: 1; }
+#tabs:empty { display: none; }
+.tab {
+  font: inherit; font-size: 12px; color: #fff; background: var(--bar); border: 0; border-radius: 999px; padding: 3px 10px; cursor: pointer;
+}
+.tab.selected { background: var(--accent); }

@@ -16,7 +16,7 @@ tauri-build = { version = "=2.7.3", features = [] }
 [dependencies]
 controlmyiphone-core = { path = "../core" }
 # custom-protocol serves web/ from inside the exe instead of a dev server
-tauri = { version = "=2.12.4", features = ["custom-protocol"] }
+tauri = { version = "=2.12.4", features = ["custom-protocol", "macos-private-api"] }
 tokio = { version = "1.54", features = ["rt", "time", "sync"] }
 serde_json = "1"
 
