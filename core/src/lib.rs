@@ -19,6 +19,7 @@ use idevice::{
     rsd::RsdHandshake,
     tcp::handle::{AdapterHandle, UdpSocketHandle},
     usbmuxd::{Connection, UsbmuxdAddr, UsbmuxdConnection, UsbmuxdDevice},
+    xpc::{Dictionary as XpcDictionary, XPCObject},
 };
 use serde::Serialize;
 use tokio::sync::mpsc;
@@ -181,11 +182,7 @@ pub async fn mirror(
     }
 
     let loaded = load_developer_tools(&provider).await?;
-    let proxy = CoreDeviceProxy::connect(&provider).await?;
-    let rsd_port = proxy.tunnel_info().server_rsd_port;
-    let mut adapter = proxy.create_software_tunnel()?.to_async_handle();
-    let stream = adapter.connect(rsd_port).await?;
-    let mut handshake = RsdHandshake::new(stream).await?;
+    let (mut adapter, mut handshake) = tunnel(&provider).await?;
     if !loaded {
         load_developer_tools_tunneled(&provider, &mut adapter, &mut handshake).await?;
     }
@@ -262,6 +259,31 @@ pub async fn mirror(
     result
 }
 
+// idevice asks for 3600, which keeps a killed app's session, and the phone's recording indicator, going for an hour,
+// a live session stays up past this because feedback reaches the phone every second
+fn with_timeout(mut params: XpcDictionary) -> XpcDictionary {
+    params.insert("timeout".into(), XPCObject::UInt64(15));
+    params
+}
+
+/// ends screen sharing left running on the phone, like by an app that was killed
+pub async fn stop_sharing(udid: &str) -> Result<()> {
+    let provider = provider(udid).await?;
+    let (mut adapter, mut handshake) = tunnel(&provider).await?;
+    let mut client = DisplayServiceClient::connect_rsd(&mut adapter, &mut handshake).await?;
+    client.stop_media_stream().await?;
+    Ok(())
+}
+
+async fn tunnel(provider: &dyn IdeviceProvider) -> Result<(AdapterHandle, RsdHandshake)> {
+    let proxy = CoreDeviceProxy::connect(provider).await?;
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
+    let mut adapter = proxy.create_software_tunnel()?.to_async_handle();
+    let stream = adapter.connect(rsd_port).await?;
+    let handshake = RsdHandshake::new(stream).await?;
+    Ok((adapter, handshake))
+}
+
 pub async fn within_a_minute<T>(action: impl Future<Output = Result<T>>) -> Result<T> {
     tokio::time::timeout(Duration::from_secs(60), action)
         .await
@@ -284,6 +306,8 @@ impl Screen {
     // like device hub, audio first to set up the session, video fails without it
     async fn start(adapter: &mut AdapterHandle, handshake: &mut RsdHandshake) -> Result<Self> {
         let mut client = DisplayServiceClient::connect_rsd(adapter, handshake).await?;
+        // a session a killed app left behind keeps the phone's recording indicator on for up to an hour
+        let _ = client.stop_media_stream().await;
         let audio = adapter.bind_udp(0).await?;
         let video = adapter.bind_udp(0).await?;
         let host = adapter.host_ip().to_string();
@@ -312,7 +336,7 @@ impl Screen {
             CLIENT_FEATURES,
             session,
         );
-        client.start_media_stream(params).await?;
+        client.start_media_stream(with_timeout(params)).await?;
 
         let ssrc = uuid::Uuid::new_v4().as_u128() as u32;
         let offer = h264::offer(&call_id(), &call_info, ssrc)?;
@@ -326,7 +350,7 @@ impl Screen {
             1,
             session,
         );
-        client.start_media_stream(params).await?;
+        client.start_media_stream(with_timeout(params)).await?;
         Ok(Screen {
             client,
             _audio: audio,

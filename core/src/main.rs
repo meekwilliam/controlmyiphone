@@ -20,6 +20,7 @@ async fn main() {
             (Ok(x), Ok(y)) => press(udid, &[Input::Touch { x, y }, Input::Lift { x, y }]).await,
             _ => Err(engine::Error::Other("x and y run from 0 to 65535".into())),
         },
+        ["stop", udid] => engine::stop_sharing(udid).await,
         ["button", udid, name] => match button(name) {
             Some(b) => press(udid, &[Input::Button(b)]).await,
             None => Err(engine::Error::Other(
@@ -28,7 +29,7 @@ async fn main() {
         },
         _ => {
             eprintln!(
-                "usage: controlmyiphone-cli list | stream <udid> [seconds] | tap <udid> <x> <y> | button <udid> <name>"
+                "usage: controlmyiphone-cli list | stream <udid> [seconds] | stop <udid> | tap <udid> <x> <y> | button <udid> <name>"
             );
             std::process::exit(2);
         }
