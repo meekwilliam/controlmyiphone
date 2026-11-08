@@ -1,4 +1,4 @@
-# controlmyiphone: mirror and control your iPhone from Windows or Mac
+# controlmyiphone: mirror and control your iPhone from Windows
 
 **See your iPhone's screen live on your PC and control it with your mouse and keyboard, for free.** Plug it in (or use over Wi-Fi), and the screen shows up at up to 60 frames per second in full resolution. Click to tap, drag to swipe, scroll with your mouse wheel, and type with your keyboard. No jailbreak needed. No install on IPhone needed.
 
